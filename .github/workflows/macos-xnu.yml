@@ -1,0 +1,44 @@
+name: elish macOS XNU toolchain and source platform
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'preflight=SDK; bootstrap=generic 4K; platform=real archives and board feature link (no prelink/boot)'
+        type: choice
+        options: [preflight, bootstrap, platform]
+        default: preflight
+
+permissions:
+  contents: read
+
+jobs:
+  xnu:
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+      PYTHONUNBUFFERED: '1'
+      GIT_LFS_SKIP_SMUDGE: '1'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      BUILD_MODE: ${{ inputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install small build dependency
+        run: brew list unifdef >/dev/null 2>&1 || brew install unifdef
+      - name: Check pinned sources and compile
+        run: python3 -B scripts/ci/macos_xnu.py --mode "$BUILD_MODE"
+      - name: Preserve evidence and bootstrap output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elish-macos-${{ inputs.mode }}-${{ github.run_id }}
+          path: out/ci/macos/evidence
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 14
