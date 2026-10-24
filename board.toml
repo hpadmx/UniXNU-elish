@@ -49,8 +49,10 @@ fetch = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustC
 #         与我们这台平板无关，只用来确认"必须实读"这一点）。
 #   未填之前保持 0x0：`unixnu build userdata --dry-run` 会以"镜像大于分区"报错，属于期望的响亮失败。
 [userdata]
-first_lba = 0x0                    # TODO(elish): fill from elish ROM rawprogram / on-device probe
-last_lba = 0x0                     # TODO(elish): fill from elish ROM rawprogram / on-device probe
+first_lba = 0x290000               # verified 3x: OS1.0.2 ROM gpt_main0.bin (userdata first=0x290000, 4096B LBA)
+                                   #            device fastboot partition-size:userdata=0x38737FB000 B
+                                   #            enuma same-board measurement (k81)
+last_lba = 0x3b037fa               # 0x290000 + 0x38737FB000/4096 - 1; identical to enuma measured value
 lba_bytes = 4096                     # measured 2026-10-23: blockdev --getss = 4096
 windows = [
   { name = "OS", component = "OS" },
@@ -257,7 +259,8 @@ timeout = -1                         # umi 用 -1（停在菜单不自动选）�
 #   root: adb shell su -c 'cat /proc/iomem' ; adb shell cat /proc/meminfo
 #   sheng 用 0x80000000，pipa 用 0x980000000（多 bank）；umi 实测"三段 FDT DRAM bank 之和（含 4 GiB 以上）"
 #   = 0x2f9900000（12 GiB 机型）。elish 有 6/8 GiB 两个版本，**必须实读**。
-dram_size = "0x0"                  # TODO(elish): 6 GiB -> 0x180000000, 8 GiB -> 0x200000000; measure on this unit
+dram_size = "0x200000000"          # 256 GB storage tier => 8 GiB variant (elish combos: 6+128 / 8+256);
+                                   # matches enuma 8 GiB measured unit (MemTotal 7793540 kB). Re-confirm on first boot.
 skip_setup_tool = "scripts/seed-data-skip-setup.py"   # 主仓库的脚本（--skip-setup 用）
 panic_screen = true                  # 把 panic 屏打进 payload 里的内核副本：无 UART 时唯一的内核输出
 # 与 sheng/pipa/umi 相同 IPSW 的两个原始 trust cache 哈希；现在可用公开脚本导出：
