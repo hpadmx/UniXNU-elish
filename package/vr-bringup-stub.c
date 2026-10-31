@@ -37,10 +37,6 @@ __attribute__((used)) extern const uint8_t verified_root_key[395] = { 0 };
 
 void boot_progress_poll (void) { }
 
-#ifdef __cplusplus
-}
-#endif
-
 int vr_open(const uint8_t *env, size_t bytes, const uint8_t *key, uint64_t gen,
             const struct vr_crypto *c, struct vr_view *view)
 { (void)env; (void)bytes; (void)key; (void)gen; (void)c;
@@ -49,3 +45,7 @@ int vr_open(const uint8_t *env, size_t bytes, const uint8_t *key, uint64_t gen,
 int vr_verify_block(const struct vr_view *v, uint64_t block, const void *data,
                     size_t len, const struct vr_crypto *c)
 { (void)v; (void)block; (void)data; (void)len; (void)c; return 0; }
+
+#ifdef __cplusplus
+}
+#endif
