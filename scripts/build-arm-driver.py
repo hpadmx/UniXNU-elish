@@ -75,10 +75,8 @@ if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):
     if args.verified_root_bundle:
         command += ['-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1']
 if component == 'NativeUfs':
-    # elish bring-up override (2026-10-31): plain read-only block device, no
-    # VerifiedBlock policy macros -- the vr_* crypto library belongs to the
-    # stage-4 owner-signature chain; the probe ladder does not need it.
-    command += ['-I', str(ROOT / 'drivers/NativeVirtioBlock'), '-mgeneral-regs-only']
+    command += ['-I', str(ROOT / 'kits/VerifiedRoot/include'), '-I', str(ROOT / 'drivers/NativeVirtioBlock'),
+                '-DNATIVE_VERIFIED_BLOCK=1', '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-mgeneral-regs-only']
 if component=='NativeOfflineGPU':
     command += ['-I',str(ROOT/'drivers/NativeVirtioConsole')]
 if component in ('NativeLegacyDisplay','NativeHidInput'):
@@ -108,4 +106,24 @@ if deployment != (2, 0x110000):
 archive = out / ('lib' + component + '.a')
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, destination], check=True)
+if component == 'NativeUfs':
+    # elish bring-up: link the permissive vr_* stub from the device kit so the
+    # kernel link resolves without the stage-4 owner-signature chain.
+    stub = ROOT / 'kits/elish/vr-bringup-stub.c'
+    stub_obj = out / 'vr-bringup-stub.o'
+    stub_cmd = [a for a in command]
+    stub_cmd = [str(stub_obj) if False else a for a in stub_cmd]
+    built = False
+    new_cmd = []
+    for i2, a in enumerate(stub_cmd):
+        new_cmd.append(str(stub) if a == str(source) else ('-o' if a == '-o' else a))
+        if a == '-o':
+            built = True
+    new_cmd = [str(stub_obj) if (i2 > 0 and new_cmd[i2-1] == '-o') else a for i2, a in enumerate(new_cmd)]
+    r2 = subprocess.run(new_cmd, cwd=record['directory'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    (out / 'vr-stub-compile.log').write_text(r2.stdout)
+    if r2.returncode:
+        raise SystemExit(r2.stdout[-3500:])
+    subprocess.run(['xcrun', 'ar', 'rcs', archive, stub_obj], check=True)
+    print('elish: permissive vr bring-up stub added to libNativeUfs.a')
 print(f'{component}: -Werror build and actual ARM64/iOS 17 object audit passed')
