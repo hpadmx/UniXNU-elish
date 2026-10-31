@@ -95,13 +95,12 @@ ARCHIVES_REQUIRED = [
     'build-native-aes-bindings.py',
     'build-libpthread-kernel.py',
     'build-link-stubs.py',
-    'build-platform-power.py',
 ]
 REQUIRED_DEFCONFIG = [
     'CONFIG_XNU_SOURCE_CORECRYPTO14', 'CONFIG_XNU_SOURCE_PTHREAD', 'CONFIG_XNU_ARM_DT_PLATFORM',
     'CONFIG_XNU_ARMCPU', 'CONFIG_XNU_NATIVE_AES', 'CONFIG_XNU_TRUST_CACHE_RUNTIME',
     'CONFIG_XNU_NATIVE_CS_HASH_CACHE', 'CONFIG_XNU_DT_PANIC_REGION', 'CONFIG_XNU_NATIVE_ARCH_TIMER',
-    'CONFIG_XNU_NATIVE_PAN', 'CONFIG_XNU_SHENG_PMGR',
+    'CONFIG_XNU_NATIVE_PAN',
 ]
 STAGES = [
     ('elish_defconfig', 'stage 1: kernel entry / panic screen'),

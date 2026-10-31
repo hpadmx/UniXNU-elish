@@ -109,7 +109,17 @@ defconfig = "elish_defconfig"        # 阶段 1；后续阶段见 configs/elish_
 #      `Missing archive: <name> (no builder makes it, supply the archive)`）。
 #   6. 若将来换 pin：先 `git trees` 重列各仓 scripts/，按上表重算"从哪里取"，再更新本表与
 #      scripts/check-elish.py 的 ARCHIVES_REQUIRED。
-archives = []   # stage-1 baseline: no archive builders (wh1stl3 known-good); restore staged list at stage 2
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-arm-driver.py ArmDTPlatform",
+  "build-arm-driver.py ArmCpu",
+  "build-arm-driver.py NativeAES",
+  "build-native-aes-bindings.py",
+  "build-libpthread-kernel.py",
+  "build-link-stubs.py",
+]   # baseline needs corecrypto/pthread/driver archives via the official macos.yml flow
+    # (wh1stl3's success used their own ci scripts; platform-power dropped: SHENG_PMGR=n)
 
 [kernel.prelink]
 tool = "kits/NativePrelink/emit_prelink.py"
