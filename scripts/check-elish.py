@@ -80,7 +80,9 @@ SM8550_ONLY = {
 # stage 1 must stay clean of hardware it cannot drive yet
 STAGE1_FORBIDDEN = dict(SM8550_ONLY)
 STAGE1_FORBIDDEN.update({
-    'CONFIG_XNU_NATIVE_UFS': 'UFS needs the SM8250 register port (stage 2)',
+    # CONFIG_XNU_NATIVE_UFS moved to stage 1+ on 2026-10-31: the in-tree generic
+    # hostBringUp needs no SM8250 register port (HC/SMMU addresses are SoC-family
+    # shared) and probe=10 panics with a full diagnostic page.
     'CONFIG_XNU_NATIVE_LEGACY_DISPLAY': 'display is stage 3',
     'CONFIG_XNU_NATIVE_MOBILE_DISPLAY': 'display is stage 3',
     'CONFIG_XNU_SOURCE_MOCKFS': 'no fixture root yet (stage 4)',
