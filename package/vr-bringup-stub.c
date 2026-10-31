@@ -26,14 +26,14 @@ static int stub_sha256(const void *src, size_t len, uint8_t out[32])
 static int stub_rsa(const uint8_t *key, const uint8_t *hash, const uint8_t *sig)
 { (void)key; (void)hash; (void)sig; return 1; }
 
-__attribute__((used)) const struct vr_crypto vr_xnu_crypto = { stub_sha256, stub_rsa };
-__attribute__((used)) const struct NativeVerifiedBlockPolicy verified_root_policies[1] = { { NULL, 0 } };
-__attribute__((used)) const uint64_t verified_root_policy_count = 1;
+__attribute__((used)) extern const struct vr_crypto vr_xnu_crypto = { stub_sha256, stub_rsa };
+__attribute__((used)) extern const struct NativeVerifiedBlockPolicy verified_root_policies[1] = { { NULL, 0 } };
+__attribute__((used)) extern const uint64_t verified_root_policy_count = 1;
 
 /* The trusted key must come from outside the untrusted envelope; the bring-up
  * probe ladder never reaches configureVerification without a policy manifest,
  * so a zero key is safe for the read-only stage. */
-__attribute__((used)) const uint8_t verified_root_key[395] = { 0 };
+__attribute__((used)) extern const uint8_t verified_root_key[395] = { 0 };
 
 void boot_progress_poll (void) { }
 
