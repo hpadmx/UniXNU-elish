@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct vr_crypto {
     int (*sha256)(const void *, size_t, uint8_t[32]);
     int (*rsa3072_sha256)(const uint8_t[395], const uint8_t[32], const uint8_t[384]);
@@ -32,6 +36,10 @@ __attribute__((used)) const uint64_t verified_root_policy_count = 1;
 __attribute__((used)) const uint8_t verified_root_key[395] = { 0 };
 
 void boot_progress_poll (void) { }
+
+#ifdef __cplusplus
+}
+#endif
 
 int vr_open(const uint8_t *env, size_t bytes, const uint8_t *key, uint64_t gen,
             const struct vr_crypto *c, struct vr_view *view)
