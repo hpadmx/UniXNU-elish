@@ -12,13 +12,9 @@ What it checks without the tablet and without the UEFI tree:
      -- the kernel step fails with "no builder makes it, supply the archive" when an
      archive has no builder (UniXNU scripts/unixnu/kernel.py), so we replicate the rule.
      Deleting an entry used to be invisible (only "archives is non-empty" was checked);
-     ARCHIVES_REQUIRED = [
-    'build-corecrypto-14.py',
-    'build-corecrypto-14.py --namespace',
-    'build-arm-driver.py ArmDTPlatform',
-    'build-arm-driver.py ArmCpu',
-    'build-libpthread-kernel.py',
-    'build-link-stubs.py',
+     ARCHIVES_REQUIRED now makes a missing entry a hard error.
+  4. the four staged defconfigs: exist, are cumulative, and never enable an SM8550-only flag
+  5. [firmware    'build-arm-driver.py NativeUfs',
 ]: preflight path, the six-patch DXE checklist (5 upstream Mu-Silicium +
      Gic-Spurious), elishPkg / Resources/Configs/elish.toml (with --uefi)
   6. boot image: [bootimg.image] header_version/pagesize/offsets and the splash
@@ -80,9 +76,6 @@ SM8550_ONLY = {
 # stage 1 must stay clean of hardware it cannot drive yet
 STAGE1_FORBIDDEN = dict(SM8550_ONLY)
 STAGE1_FORBIDDEN.update({
-    # CONFIG_XNU_NATIVE_UFS moved to stage 1+ on 2026-10-31: the in-tree generic
-    # hostBringUp needs no SM8250 register port (HC/SMMU addresses are SoC-family
-    # shared) and probe=10 panics with a full diagnostic page.
     'CONFIG_XNU_NATIVE_LEGACY_DISPLAY': 'display is stage 3',
     'CONFIG_XNU_NATIVE_MOBILE_DISPLAY': 'display is stage 3',
     'CONFIG_XNU_SOURCE_MOCKFS': 'no fixture root yet (stage 4)',
@@ -98,13 +91,16 @@ ARCHIVES_REQUIRED = [
     'build-corecrypto-14.py --namespace',
     'build-arm-driver.py ArmDTPlatform',
     'build-arm-driver.py ArmCpu',
+    'build-arm-driver.py NativeAES',
+    'build-native-aes-bindings.py',
     'build-libpthread-kernel.py',
     'build-link-stubs.py',
-    'build-arm-driver.py NativeUfs',
 ]
 REQUIRED_DEFCONFIG = [
     'CONFIG_XNU_SOURCE_CORECRYPTO14', 'CONFIG_XNU_SOURCE_PTHREAD', 'CONFIG_XNU_ARM_DT_PLATFORM',
-    'CONFIG_XNU_ARMCPU', 'CONFIG_XNU_NATIVE_ARCH_TIMER',
+    'CONFIG_XNU_ARMCPU', 'CONFIG_XNU_NATIVE_AES', 'CONFIG_XNU_TRUST_CACHE_RUNTIME',
+    'CONFIG_XNU_NATIVE_CS_HASH_CACHE', 'CONFIG_XNU_DT_PANIC_REGION', 'CONFIG_XNU_NATIVE_ARCH_TIMER',
+    'CONFIG_XNU_NATIVE_PAN', 'CONFIG_XNU_NATIVE_UFS',
 ]
 STAGES = [
     ('elish_defconfig', 'stage 1: kernel entry / panic screen'),
@@ -233,7 +229,8 @@ def main():
     # 3. [kernel] archives ------------------------------------------------------
     archives = board.get('kernel', {}).get('archives')
     if not archives:
-        todos.append('[kernel] archives is empty: expected for the umi-verified minimal source kernel')
+        errors.append('[kernel] archives is missing or empty: the kernel step raises '
+                      '"no builder makes it, supply the archive" for every unbuilt *_ARCHIVE')
     else:
         for index, entry in enumerate(archives):
             if not isinstance(entry, str) or not entry.strip():

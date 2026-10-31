@@ -109,20 +109,17 @@ defconfig = "elish_defconfig"        # 阶段 1；后续阶段见 configs/elish_
 #      `Missing archive: <name> (no builder makes it, supply the archive)`）。
 #   6. 若将来换 pin：先 `git trees` 重列各仓 scripts/，按上表重算"从哪里取"，再更新本表与
 #      scripts/check-elish.py 的 ARCHIVES_REQUIRED。
-# 源码构建必需的 6 条归档（umi 运行时开关 + 我们的 build-xnu-4k-baseline.sh 路径；
-# run 41190148854 证实 source bootstrap 需要 _corecrypto_kext_start）：
 archives = [
   "build-corecrypto-14.py",
   "build-corecrypto-14.py --namespace",
   "build-arm-driver.py ArmDTPlatform",
   "build-arm-driver.py ArmCpu",
+  "build-arm-driver.py NativeAES",
+  "build-native-aes-bindings.py",
   "build-libpthread-kernel.py",
   "build-link-stubs.py",
-  # 阶段 2：SM8250 UFS 只读块存储（官方 choices 原生支持；HC 0x1d84000 / SMMU 0x15000000
-  # 与 SM8550 同址，树内通用 hostBringUp 不依赖 GCC 时钟常量）
   "build-arm-driver.py NativeUfs",
-]
-   # baseline needs corecrypto/pthread/driver archives via the official macos.yml flow
+]   # baseline needs corecrypto/pthread/driver archives via the official macos.yml flow
     # (wh1stl3's success used their own ci scripts; platform-power dropped: SHENG_PMGR=n)
 
 [kernel.prelink]
@@ -255,10 +252,10 @@ tags_offset = 0x1e00000
 # with "FDT_ERR_EXISTS". sheng needs this block only because its stock DTB has no splash region.
 [payload]
 volume = "ELISHESP"                  # FAT label，≤11 字符
-size_mib = 64
+size_mib = 192
 loader = "firmware"
 title = "elish first boot: source 4K XNU to the panic screen"
-timeout = 3                      # auto-select xnu after 3s (no input device in bring-up)
+timeout = -1                         # umi 用 -1（停在菜单不自动选）；首轮 bring-up 比自动启动更好用
 # measured 2026-10-23: 最高 System RAM bank 末尾 0x280000000 − DRAM base 0x80000000 = 0x200000000（8 GiB 机型，MemTotal 7793540 kB）。
 #   root: adb shell su -c 'cat /proc/iomem' ; adb shell cat /proc/meminfo
 #   sheng 用 0x80000000，pipa 用 0x980000000（多 bank）；umi 实测"三段 FDT DRAM bank 之和（含 4 GiB 以上）"
@@ -288,8 +285,6 @@ kernel_args = [
   "sheng-pmgr=2",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
-  # 阶段 2 首启：UFS 只读探针阶梯 probe=10 = 拉起存储 + 读 GPT + panic 输出整页诊断
-  # （无论成败都会在 panic 屏写出原因 —— 无 UART 时让屏幕开口说话的最短路径）
   "native-ufs-probe=10",
   "native-ufs-diagnostics=1",
   # TODO(elish): 屏蔽蜂窝/定位等服务（elish 是 5G 机型；sheng 的名单是板级专属，需要重定）
