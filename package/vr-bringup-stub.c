@@ -26,6 +26,13 @@ __attribute__((used)) const struct vr_crypto vr_xnu_crypto = { stub_sha256, stub
 __attribute__((used)) const struct NativeVerifiedBlockPolicy verified_root_policies[1] = { { NULL, 0 } };
 __attribute__((used)) const uint64_t verified_root_policy_count = 1;
 
+/* The trusted key must come from outside the untrusted envelope; the bring-up
+ * probe ladder never reaches configureVerification without a policy manifest,
+ * so a zero key is safe for the read-only stage. */
+__attribute__((used)) const uint8_t verified_root_key[395] = { 0 };
+
+void boot_progress_poll (void) { }
+
 int vr_open(const uint8_t *env, size_t bytes, const uint8_t *key, uint64_t gen,
             const struct vr_crypto *c, struct vr_view *view)
 { (void)env; (void)bytes; (void)key; (void)gen; (void)c;

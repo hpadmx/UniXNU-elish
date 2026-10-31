@@ -107,23 +107,33 @@ archive = out / ('lib' + component + '.a')
 archive.unlink(missing_ok=True)
 subprocess.run(['xcrun', 'ar', 'rcs', archive, destination], check=True)
 if component == 'NativeUfs':
-    # elish bring-up: link the permissive vr_* stub from the device kit so the
-    # kernel link resolves without the stage-4 owner-signature chain.
+    # elish bring-up: the source kernel (BCM2837 baseline) does not build the
+    # IOStorageFamily component, so the abstract storage class comes from the
+    # pinned original source in refer/, compiled with the same record; plus the
+    # permissive vr_* stub from the device kit. The stage-4 owner chain replaces
+    # both with the qualified prelink bindings.
+    extra = []
+
+    def compile_into(src, objname, includes):
+        obj = out / objname
+        cmd = []
+        for i2, a in enumerate(command):
+            cmd.append(str(src) if a == str(source) else a)
+        for i2, a in enumerate(cmd):
+            if a == '-o':
+                cmd[i2 + 1] = str(obj)
+                break
+        cmd += includes
+        r2 = subprocess.run(cmd, cwd=record['directory'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        (out / (objname + '.log')).write_text(r2.stdout)
+        if r2.returncode:
+            raise SystemExit(r2.stdout[-3500:])
+        extra.append(obj)
+
+    compile_into(ROOT / 'refer/IOStorageFamily/IOBlockStorageDevice.cpp', 'IOBlockStorageDevice.o',
+                 ['-I', str(ROOT / 'build/storage-abi/include'), '-Wno-deprecated-declarations'])
     stub = ROOT / 'kits/elish/vr-bringup-stub.c'
-    stub_obj = out / 'vr-bringup-stub.o'
-    stub_cmd = [a for a in command]
-    stub_cmd = [str(stub_obj) if False else a for a in stub_cmd]
-    built = False
-    new_cmd = []
-    for i2, a in enumerate(stub_cmd):
-        new_cmd.append(str(stub) if a == str(source) else ('-o' if a == '-o' else a))
-        if a == '-o':
-            built = True
-    new_cmd = [str(stub_obj) if (i2 > 0 and new_cmd[i2-1] == '-o') else a for i2, a in enumerate(new_cmd)]
-    r2 = subprocess.run(new_cmd, cwd=record['directory'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    (out / 'vr-stub-compile.log').write_text(r2.stdout)
-    if r2.returncode:
-        raise SystemExit(r2.stdout[-3500:])
-    subprocess.run(['xcrun', 'ar', 'rcs', archive, stub_obj], check=True)
-    print('elish: permissive vr bring-up stub added to libNativeUfs.a')
+    compile_into(stub, 'vr-bringup-stub.o', [])
+    subprocess.run(['xcrun', 'ar', 'rcs', archive, *extra], check=True)
+    print('elish: original IOBlockStorageDevice + permissive vr stub added to libNativeUfs.a')
 print(f'{component}: -Werror build and actual ARM64/iOS 17 object audit passed')
