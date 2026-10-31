@@ -1,17 +1,19 @@
-# elish 内核配置 —— 阶段 1 重试：umi 真机验证过的最小 source 内核
+# elish 内核配置 —— 阶段 1 重试②：umi 运行时开关 + 源码构建必需的归档
 #
-# 依据：reAAAq/UniXNU-umi/configs/umi_defconfig 顶部注释
-#   "Early kernel entry/MMU/arm_vm_init verified on 2026-10-20"（小米 10 / SM8250，与本机同 SoC 家族）。
-# 我们上一版内核（NATIVE_AES + CRYPTO_BOOTSTRAP=prelinked + BUILD_ARCHIVES + link-stubs）
-# 在实机止步于蓝条（入口探针亮、MMU 前的紫条不亮），死于早期页表/布局段；
-# umi 验证通过这一段的内核正是本文件的最小 6 项 + 全关闭组合，且 [kernel] 无 archives。
-# 2026-10-31 实机：蓝条亮（入口执行），紫条不亮；对齐 umi 后重试。
+# 依据：reAAAq/UniXNU-umi "Early kernel entry/MMU/arm_vm_init verified 2026-10-20"。
+# 运行时开关对齐 umi（CRYPTO_BOOTSTRAP=source、NATIVE_AES/TRUST_CACHE_RUNTIME/
+# CS_HASH_CACHE/PAN/DT_PANIC_REGION 全关 —— 这些决定内核代码布局与 __PRELINK 段）；
+# 但 umi 走 donor 预链接（[kernel.prelink]），我们走 build-xnu-4k-baseline.sh 源码构建，
+# 其 source bootstrap 仍引用 _corecrypto_kext_start（run 41190148854 链接失败实证），
+# 故保留 6 条构建归档（corecrypto×2 / arm-driver×2 / libpthread / link-stubs）。
 CONFIG_XNU_SOURCE_CORECRYPTO14=y
 CONFIG_XNU_SOURCE_PTHREAD=y
 CONFIG_XNU_ARM_DT_PLATFORM=y
 CONFIG_XNU_ARMCPU=y
 CONFIG_XNU_NATIVE_ARCH_TIMER=y
 CONFIG_XNU_CRYPTO_BOOTSTRAP="source"
+CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"
+CONFIG_XNU_BUILD_ARCHIVES=y
 CONFIG_XNU_ARMVIRT_PLATFORM=n
 CONFIG_XNU_SHENG_PMGR=n
 CONFIG_XNU_NATIVE_UFS=n

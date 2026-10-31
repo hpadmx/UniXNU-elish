@@ -109,8 +109,16 @@ defconfig = "elish_defconfig"        # 阶段 1；后续阶段见 configs/elish_
 #      `Missing archive: <name> (no builder makes it, supply the archive)`）。
 #   6. 若将来换 pin：先 `git trees` 重列各仓 scripts/，按上表重算"从哪里取"，再更新本表与
 #      scripts/check-elish.py 的 ARCHIVES_REQUIRED。
-# archives 列表已移除（2026-10-31）：对齐 umi 验证过的最小 source 内核，无归档。
-# 见 configs/elish_defconfig 头部说明。
+# 源码构建必需的 6 条归档（umi 运行时开关 + 我们的 build-xnu-4k-baseline.sh 路径；
+# run 41190148854 证实 source bootstrap 需要 _corecrypto_kext_start）：
+archives = [
+  "build-corecrypto-14.py",
+  "build-corecrypto-14.py --namespace",
+  "build-arm-driver.py ArmDTPlatform",
+  "build-arm-driver.py ArmCpu",
+  "build-libpthread-kernel.py",
+  "build-link-stubs.py",
+]
    # baseline needs corecrypto/pthread/driver archives via the official macos.yml flow
     # (wh1stl3's success used their own ci scripts; platform-power dropped: SHENG_PMGR=n)
 
