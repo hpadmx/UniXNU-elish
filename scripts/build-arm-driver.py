@@ -75,8 +75,10 @@ if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):
     if args.verified_root_bundle:
         command += ['-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1']
 if component == 'NativeUfs':
-    command += ['-I', str(ROOT / 'kits/VerifiedRoot/include'), '-I', str(ROOT / 'drivers/NativeVirtioBlock'),
-                '-DNATIVE_VERIFIED_BLOCK=1', '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-mgeneral-regs-only']
+    # elish bring-up override (2026-10-31): plain read-only block device, no
+    # VerifiedBlock policy macros -- the vr_* crypto library belongs to the
+    # stage-4 owner-signature chain; the probe ladder does not need it.
+    command += ['-I', str(ROOT / 'drivers/NativeVirtioBlock'), '-mgeneral-regs-only']
 if component=='NativeOfflineGPU':
     command += ['-I',str(ROOT/'drivers/NativeVirtioConsole')]
 if component in ('NativeLegacyDisplay','NativeHidInput'):
