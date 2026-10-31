@@ -96,10 +96,9 @@ ARCHIVES_REQUIRED = [
     'build-corecrypto-14.py --namespace',
     'build-arm-driver.py ArmDTPlatform',
     'build-arm-driver.py ArmCpu',
-    'build-arm-driver.py NativeAES',
-    'build-native-aes-bindings.py',
     'build-libpthread-kernel.py',
     'build-link-stubs.py',
+    'build-arm-driver.py NativeUfs',
 ]
 REQUIRED_DEFCONFIG = [
     'CONFIG_XNU_SOURCE_CORECRYPTO14', 'CONFIG_XNU_SOURCE_PTHREAD', 'CONFIG_XNU_ARM_DT_PLATFORM',

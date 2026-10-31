@@ -118,6 +118,9 @@ archives = [
   "build-arm-driver.py ArmCpu",
   "build-libpthread-kernel.py",
   "build-link-stubs.py",
+  # 阶段 2：SM8250 UFS 只读块存储（官方 choices 原生支持；HC 0x1d84000 / SMMU 0x15000000
+  # 与 SM8550 同址，树内通用 hostBringUp 不依赖 GCC 时钟常量）
+  "build-arm-driver.py NativeUfs",
 ]
    # baseline needs corecrypto/pthread/driver archives via the official macos.yml flow
     # (wh1stl3's success used their own ci scripts; platform-power dropped: SHENG_PMGR=n)
@@ -285,6 +288,10 @@ kernel_args = [
   "sheng-pmgr=2",
   "-no_slto_panic",
   "ml-timeout-lock-panic-scale=40",
+  # 阶段 2 首启：UFS 只读探针阶梯 probe=10 = 拉起存储 + 读 GPT + panic 输出整页诊断
+  # （无论成败都会在 panic 屏写出原因 —— 无 UART 时让屏幕开口说话的最短路径）
+  "native-ufs-probe=10",
+  "native-ufs-diagnostics=1",
   # TODO(elish): 屏蔽蜂窝/定位等服务（elish 是 5G 机型；sheng 的名单是板级专属，需要重定）
   # "sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent",
 ]
