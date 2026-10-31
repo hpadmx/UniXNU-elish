@@ -23,23 +23,6 @@
 # SHENG_PMGR 链接 original-PMGR 桥（scripts/build-platform-power.py，不访问硬件）；缺了它原版 AMFI 会以
 # "No PMGR" panic。pipa 用同一个 flag，说明它跨板通用（名字里的 sheng 只是历史）。
 
-CONFIG_XNU_SOURCE_CORECRYPTO14=y
-CONFIG_XNU_SOURCE_PTHREAD=y
-CONFIG_XNU_ARM_DT_PLATFORM=y
-CONFIG_XNU_ARMCPU=y
-CONFIG_XNU_NATIVE_AES=y
-CONFIG_XNU_TRUST_CACHE_RUNTIME=y
-CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
-CONFIG_XNU_DT_PANIC_REGION=y
-CONFIG_XNU_NATIVE_ARCH_TIMER=y
-CONFIG_XNU_NATIVE_PAN=y
-CONFIG_XNU_SHENG_PMGR=y
-
-CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
-# 被裁掉组件的探针需要 no-op 钩子（scripts/build-link-stubs.py，通用）。
-CONFIG_XNU_EXTRA_LD_ARCHIVES="{tree}/build/link-stubs/libLinkStubs.a"
-CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
-CONFIG_XNU_ARMVIRT_PLATFORM=n
 
 # 与本阶段配套的 board.toml 字段：`[kernel] archives` 的 9 条（缺一条会命中 "no builder makes it"）、
 # `[[bootimg.dtb_node]]` 的 splash 保留区（0x9c000000+0x2300000）、`[bootimg.image]` 的 header_version=1。
@@ -50,4 +33,21 @@ CONFIG_XNU_ARMVIRT_PLATFORM=n
 # _native_legacy_display_probe 这类 no-op 探针符号（2026-10-23 由 GitHub Actions 实测定位）。
 # pipa 的 defconfig 缺这一行（它从未真正构建过）；umi 则选择了另一条路（CRYPTO_BOOTSTRAP=source、
 # SHENG_PMGR=n、无归档）。我们保留 pipa/sheng 的功能集，所以必须打开这一行。
-CONFIG_XNU_BUILD_ARCHIVES=y
+
+# 阶段 1 内核配置（2026-10-31 对齐 wh1stl3/UniXNU-enuma CI 实测成功的 generic 4K baseline：
+#   13 项、无归档构建器、SHENG_PMGR=n —— 上一版 SHENG_PMGR=y + prelinked 在 bootstrap
+#   阶段因 _sheng_pmgr_run 未定义链接失败，见 hpadmx/UniXNU run 40101626188）。
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
+CONFIG_XNU_SOURCE_PTHREAD=y
+CONFIG_XNU_ARM_DT_PLATFORM=y
+CONFIG_XNU_ARMCPU=y
+CONFIG_XNU_NATIVE_ARCH_TIMER=y
+CONFIG_XNU_NATIVE_PAN=y
+CONFIG_XNU_DT_PANIC_REGION=y
+CONFIG_XNU_BOOT_PROGRESS=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n
+CONFIG_XNU_SHENG_PMGR=n
+CONFIG_XNU_NATIVE_UFS=n
+CONFIG_XNU_NATIVE_ADRENO=n
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_NATIVE_LEGACY_DISPLAY=n
