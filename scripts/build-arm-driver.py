@@ -77,6 +77,9 @@ if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):
 if component == 'NativeUfs':
     command += ['-I', str(ROOT / 'kits/VerifiedRoot/include'), '-I', str(ROOT / 'drivers/NativeVirtioBlock'),
                 '-DNATIVE_VERIFIED_BLOCK=1', '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-mgeneral-regs-only']
+    # The root-diagnostics ternary (gRootDiagnostic.result = ... kIOReturn*)
+    # trips -Wsign-conversion, which -Werror promotes to a hard error.
+    command += ['-Wno-sign-conversion']
     # The __kernel__ copy of IOBlockStorageDevice must not collide with the
     # prelinked IOStorageFamily kext's registration (OSMetaClass duplicate
     # panic, OSMetaClass.cpp:896). Compile it under a private class name;
