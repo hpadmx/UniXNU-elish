@@ -5,12 +5,14 @@ elish apps_smmu facts measured on hardware today:
   * SMR[86] ignored its write (read back 0) while S2CR/CBAR/SCTLR stuck;
   * a probe sweep writing every stream-match group raised an immediate
     machine reset (the board lands in the firmware update flow), so NO
-    SMMR/S2CR stores are safe from this context.
+    SMR/S2CR stores are safe from this context.
 
 This hook therefore replaces the sweep with a strictly read-only census:
 every implemented stream-match group is rendered with its validity,
-stream id, mask and S2CR target, plus the global registers, so the DMA
-path can be designed against the state the firmware actually left.
+stream id, mask and S2CR target, plus the global registers. The census
+text goes into gRootMediaText, which rootDiagnosticFailure appends to
+the rendered panic screen (the declaration is moved above
+smmuBypassStream so the census can fill it).
 """
 import os
 import subprocess
@@ -35,6 +37,21 @@ if 'SMMU census' in src:
     print('smmu census already applied')
     sys.exit(0)
 
+# Move the gRootMediaText declaration above smmuBypassStream so the census
+# can write into it; rootDiagnosticFailure appends it to the rendered text.
+later_decl = """static char gRootDiagnosticText[2500];
+static char gRootMediaText[1000];"""
+early_decl = """static char gRootMediaText[1000];
+static char gRootDiagnosticText[2500];"""
+if later_decl not in src:
+    raise SystemExit('smmu census: gRootMediaText declaration not found')
+src = src.replace(later_decl, 'static char gRootDiagnosticText[2500];', 1)
+
+anchor_fn = 'static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, uint32_t *report,'
+if anchor_fn not in src:
+    raise SystemExit('smmu census: smmuBypassStream not found')
+src = src.replace(anchor_fn, 'static char gRootMediaText[1000];\n\n' + anchor_fn, 1)
+
 anchor = """  if (failure) {
     gRootDiagnostic.stage = "SMMU readback";
     gRootDiagnostic.result = static_cast<uint32_t> (kIOReturnNotReady);
@@ -52,29 +69,21 @@ replacement = """  if (failure) {
     // target, plus the global registers, so the DMA path can be designed
     // against what the firmware actually left behind.
     //
-    static char census[1800];
-    uint32_t cr0 = read32 (smmu, 0x0);
-    uint32_t idr0 = read32 (smmu, 0x20);
-    uint32_t idr1 = read32 (smmu, 0x24);
-    uint32_t idr2 = read32 (smmu, 0x28);
-    unsigned groups = idr0 & 255;
-    if (groups > 128) groups = 128;
-    unsigned valid = 0, freeg = 0;
-    int n = snprintf (census, sizeof (census),
+    int n = snprintf (gRootMediaText, sizeof (gRootMediaText),
                       "SMMU census CR0=%x IDR0=%x IDR1=%x IDR2=%x groups=%u\\n",
-                      cr0, idr0, idr1, idr2, groups);
-    for (unsigned i = 0; i < groups && n > 0 && n < (int) sizeof (census) - 48; ++i) {
+                      read32 (smmu, 0x0), read32 (smmu, 0x20),
+                      read32 (smmu, 0x24), read32 (smmu, 0x28),
+                      (unsigned) ((read32 (smmu, 0x20) & 255) > 128
+                                  ? 128 : (read32 (smmu, 0x20) & 255)));
+    for (unsigned i = 0; i < 128 && n > 0 && n < (int) sizeof (gRootMediaText) - 48; ++i) {
       uint32_t smr = read32 (smmu, 0x800 + 4 * i);
-      if (!(smr & 0x80000000U)) { freeg++; continue; }
+      if (!(smr & 0x80000000U)) continue;
       uint32_t s2cr = read32 (smmu, 0xc00 + 4 * i);
-      valid++;
-      n += snprintf (census + n, sizeof (census) - n,
+      n += snprintf (gRootMediaText + n, sizeof (gRootMediaText) - n,
                      "%u:sm=%x s2=%x\\n", i, smr, s2cr);
     }
-    n += snprintf (census + n, sizeof (census) - n,
-                   "valid=%u free=%u idx=%u bank=%u\\n", valid, freeg, index, bank);
     rootDiagnosticFailure (failure);
-    panic ("NATIVE_UFS smmu census: %s", census);
+    panic ("NATIVE_UFS smmu census idx=%u bank=%u", index, bank);
   }"""
 
 if anchor not in src:
