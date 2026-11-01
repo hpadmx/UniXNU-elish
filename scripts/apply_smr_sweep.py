@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
-"""CI pre_build hook: run the UFS probe with ZERO SMMU writes.
+"""CI pre_build hook: run the UFS probe with ZERO SMMU writes, and render
+the SMMU fault registers on any diagnostic panic.
 
-Hardware facts measured today (boot_full34..40):
+Hardware facts measured today (boot_full34..41):
   * the UFS host controller is alive (HC ver 3.0) but its stream (0x5c0 per
     the stock elish DT) has no SMMU mapping, so its first DMA faults;
   * NS stores to the stream-match registers are firmware-owned: SMR[0] and
     SMR[5] probes reset the machine instantly, SMR[86] is silently ignored,
     and the CR0 CLIENTPD store also resets;
-  * S2CR/CBAR/CBA2R/SCTLR stores stick, but without an SMR they are dead.
+  * with the takeover skipped entirely, the kernel reaches the UFS DMA and
+    the SMMU faults it (expected); the driver's diagnostic path then panics
+    with a deliberate BRK ("Panic (by design)").
 
-So this hook makes smmuBypassStream a no-op (the takeover is skipped
-entirely, nothing in the SMMU is written) and teaches the failure renderer
-to also dump the SMMU global fault registers (GFSR/GFSYNR0..2) - the
-faulting UFS DMA records its real stream ID there, which is the ground
-truth every further fix needs.
-
-Anchors are single lines matched with startswith/equals, immune to the
-continuation-line alignment differences between submodule revisions.
+This hook keeps the takeover skipped and teaches the driver's failure
+renderer to also dump the SMMU global fault registers (GFSR/GFSYNR0..2) -
+GFSYNR1 carries the stream ID of the faulting UFS DMA, the ground truth
+for the mapping fix.
 """
 import os
 import subprocess
@@ -50,13 +49,11 @@ for i, l in enumerate(lines):
        i + 1 < len(lines) and lines[i + 1].strip() == 'static char gRootMediaText[1000];':
         pair_idx = i
         break
-if pair_idx is None:
-    raise SystemExit('smmu skip: gRootMediaText declaration pair not found')
-decl_line = lines[pair_idx + 1]
-del lines[pair_idx + 1]
-# find the smmuBypassStream definition and insert the declaration before it
-fn_idx = next(i for i, l in enumerate(lines) if l.startswith('static void smmuBypassStream ('))
-lines.insert(fn_idx, decl_line)
+if pair_idx is not None:
+    decl_line = lines[pair_idx + 1]
+    del lines[pair_idx + 1]
+    fn_idx = next(i for i, l in enumerate(lines) if l.startswith('static void smmuBypassStream ('))
+    lines.insert(fn_idx, decl_line)
 
 # 2. smmuBypassStream: take no SMMU action at all.
 fn_idx = next(i for i, l in enumerate(lines) if l.startswith('static void smmuBypassStream ('))
@@ -79,7 +76,7 @@ skip_block = """  //
 lines.insert(brace_idx + 1, skip_block)
 
 # 3. rootDiagnosticFailure: append the SMMU global fault registers after the
-#    gRootMediaText strlcat.
+#    gRootMediaText strlcat (line-anchored, alignment-immune).
 cat_idx = next(i for i, l in enumerate(lines)
                if l.strip() == 'strlcat (gRootDiagnosticText, gRootMediaText, sizeof (gRootDiagnosticText));')
 fault_block = """  {
