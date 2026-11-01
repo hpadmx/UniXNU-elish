@@ -37,6 +37,17 @@ if not target.is_file():
     raise SystemExit(f'smr sweep: {target} still missing after submodule init')
 
 src = target.read_text()
+
+# The sweep writes the census into gRootMediaText, but that array is
+# declared further down the file (after smmuBypassStream). Move the
+# declaration above it so the sweep can fill it.
+later_decl = """static char gRootDiagnosticText[2500];
+static char gRootMediaText[1000];"""
+if later_decl in src:
+    src = src.replace(later_decl, 'static char gRootDiagnosticText[2500];', 1)
+    anchor_fn = 'static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, uint32_t *report,'
+    src = src.replace(anchor_fn, 'static char gRootMediaText[1000];\n\n' + anchor_fn, 1)
+
 if 'SMR sweep' in src:
     print('smr sweep already applied')
     sys.exit(0)
