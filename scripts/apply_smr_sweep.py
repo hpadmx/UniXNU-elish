@@ -14,6 +14,9 @@ entirely, nothing in the SMMU is written) and teaches the failure renderer
 to also dump the SMMU global fault registers (GFSR/GFSYNR0..2) - the
 faulting UFS DMA records its real stream ID there, which is the ground
 truth every further fix needs.
+
+Anchors are single lines matched with startswith/equals, immune to the
+continuation-line alignment differences between submodule revisions.
 """
 import os
 import subprocess
@@ -38,14 +41,29 @@ if 'SMMU SKIP' in src:
     print('smmu skip already applied')
     sys.exit(0)
 
-# 1. smmuBypassStream: take no SMMU action at all.
-fn_anchor = """static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, uint32_t *report,
-                             uint64_t dma, uint64_t bytes)
-{"""
-fn_skip = """static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemoryMap> &keep, uint32_t *report,
-                             uint64_t dma, uint64_t bytes)
-{
-  //
+lines = src.split('\n')
+
+# 1. Move the gRootMediaText declaration above smmuBypassStream.
+pair_idx = None
+for i, l in enumerate(lines):
+    if l.strip() == 'static char gRootDiagnosticText[2500];' and \
+       i + 1 < len(lines) and lines[i + 1].strip() == 'static char gRootMediaText[1000];':
+        pair_idx = i
+        break
+if pair_idx is None:
+    raise SystemExit('smmu skip: gRootMediaText declaration pair not found')
+decl_line = lines[pair_idx + 1]
+del lines[pair_idx + 1]
+# find the smmuBypassStream definition and insert the declaration before it
+fn_idx = next(i for i, l in enumerate(lines) if l.startswith('static void smmuBypassStream ('))
+lines.insert(fn_idx, decl_line)
+
+# 2. smmuBypassStream: take no SMMU action at all.
+fn_idx = next(i for i, l in enumerate(lines) if l.startswith('static void smmuBypassStream ('))
+brace_idx = fn_idx
+while lines[brace_idx].rstrip() != '{':
+    brace_idx += 1
+skip_block = """  //
   // SMMU SKIP: every useful SMMU store (SMR entries, CR0 flags) is owned by
   // the firmware on this board and resets the machine. Run the UFS probe
   // with the SMMU untouched instead; the first UFS DMA will fault, the
@@ -57,22 +75,14 @@ fn_skip = """static void smmuBypassStream (uint16_t stream, OSSharedPtr<IOMemory
   report[0] = 0;
   report[1] = 0;
   report[2] = 0;
-  return;
-"""
-if fn_anchor not in src:
-    raise SystemExit('smmu skip: smmuBypassStream anchor not found')
-src = src.replace(fn_anchor, fn_skip, 1)
+  return;"""
+lines.insert(brace_idx + 1, skip_block)
 
-# 2. rootDiagnosticFailure: append the SMMU global fault registers.
-fail_anchor = """  formatUfsRootDiagnostics (gRootDiagnosticText, sizeof (gRootDiagnosticText), gRootDiagnostic, reason);
-  strlcat (gRootDiagnosticText, gRootMediaText, sizeof (gRootDiagnosticText));"""
-fail_add = """  formatUfsRootDiagnostics (gRootDiagnosticText, sizeof (gRootDiagnosticText), gRootDiagnostic, reason);
-  strlcat (gRootDiagnosticText, gRootMediaText, sizeof (gRootDiagnosticText));
-  {
-    //
-    // The SMMU's own fault record: GFSYNR1 carries the stream ID of the
-    // faulting DMA - the ground truth for the UFS stream question.
-    //
+# 3. rootDiagnosticFailure: append the SMMU global fault registers after the
+#    gRootMediaText strlcat.
+cat_idx = next(i for i, l in enumerate(lines)
+               if l.strip() == 'strlcat (gRootDiagnosticText, gRootMediaText, sizeof (gRootDiagnosticText));')
+fault_block = """  {
     OSSharedPtr<IOMemoryMap> fkeep;
     uintptr_t fb = mapPhys (0x15000000ULL, 0xd0000, fkeep);
     if (fb) {
@@ -83,9 +93,10 @@ fail_add = """  formatUfsRootDiagnostics (gRootDiagnosticText, sizeof (gRootDiag
       strlcat (gRootDiagnosticText, ftxt, sizeof (gRootDiagnosticText));
     }
   }"""
-if fail_anchor not in src:
-    raise SystemExit('smmu skip: rootDiagnosticFailure anchor not found')
-src = src.replace(fail_anchor, fail_add, 1)
+lines[cat_idx + 1:cat_idx + 1] = fault_block.split('\n')
 
+src = '\n'.join(lines)
+if 'SMMU SKIP' not in src or 'SMMUFLT' not in src:
+    raise SystemExit('smmu skip: injection verification failed')
 target.write_text(src)
 print('smmu skip + fault register dump injected into', target)
