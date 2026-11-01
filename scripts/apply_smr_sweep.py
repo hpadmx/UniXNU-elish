@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""CI pre_build hook: inject the SMR sweep + retry into NativeUfs.cpp.
+"""CI pre_build hook: inject a READ-ONLY SMMU census into NativeUfs.cpp.
 
-elish apps_smmu: SMR[86] ignored its write (read back 0) while S2CR/CBAR/
-SCTLR all stuck, so the group is likely locked by firmware. This hook
-initializes the drivers/NativeUfs submodule if needed, then injects a
-failure-path patch: sweep all 128 stream-match groups with a valid-bit-
-clear probe write (cannot influence stream matching), retry the takeover
-on the first writable group, and carry the writable mask on the panic
-screen if nothing is writable.
+elish apps_smmu facts measured on hardware today:
+  * SMR[86] ignored its write (read back 0) while S2CR/CBAR/SCTLR stuck;
+  * a probe sweep writing every stream-match group raised an immediate
+    machine reset (the board lands in the firmware update flow), so NO
+    SMMR/S2CR stores are safe from this context.
 
-The later "git submodule update --init --recursive" from the build is a
-no-op once the submodule sits at its pinned commit, so the patch
-survives into the compile.
+This hook therefore replaces the sweep with a strictly read-only census:
+every implemented stream-match group is rendered with its validity,
+stream id, mask and S2CR target, plus the global registers, so the DMA
+path can be designed against the state the firmware actually left.
 """
 import os
 import subprocess
@@ -29,11 +28,11 @@ if not target.is_file():
     subprocess.run(['git', '-C', str(unixnu), 'submodule', 'update', '--init',
                     '--depth', '1', 'drivers/NativeUfs'], check=True)
 if not target.is_file():
-    raise SystemExit(f'smr sweep: {target} still missing after submodule init')
+    raise SystemExit(f'smmu census: {target} still missing after submodule init')
 
 src = target.read_text()
-if 'SMR sweep' in src:
-    print('smr sweep already applied')
+if 'SMMU census' in src:
+    print('smmu census already applied')
     sys.exit(0)
 
 anchor = """  if (failure) {
@@ -46,55 +45,39 @@ anchor = """  if (failure) {
 
 replacement = """  if (failure) {
     //
-    // SMR sweep: some stream-match groups ignore NS writes on this board.
-    // Probe all 128 groups with the VALID BIT CLEAR (such a write cannot
-    // influence stream matching, so it is safe on a live SMMU), then retry
-    // the takeover on the first group that accepts it.
+    // READ-ONLY SMMU census. A store to a locked stream-match group raised
+    // an immediate reset on this board, so not a single SMMU write happens
+    // here. Render the complete firmware state instead: every implemented
+    // stream-match group with its validity, stream id, mask and S2CR
+    // target, plus the global registers, so the DMA path can be designed
+    // against what the firmware actually left behind.
     //
-    uint64_t  writable[2] = {0, 0};
-    unsigned  chosen = 0xffffffffU;
-    for (unsigned i = 0; i < 128; ++i) {
-      uint32_t before = read32 (smmu, 0x800 + 4 * i);
-      if (before & 0x80000000U) continue;
-      write32 (smmu, 0x800 + 4 * i, 0x60);
-      uint32_t after = read32 (smmu, 0x800 + 4 * i);
-      write32 (smmu, 0x800 + 4 * i, before);
-      if (after == 0x60) {
-        writable[i / 64] |= 1ULL << (i % 64);
-        if (chosen == 0xffffffffU) chosen = i;
-      }
+    static char census[1800];
+    uint32_t cr0 = read32 (smmu, 0x0);
+    uint32_t idr0 = read32 (smmu, 0x20);
+    uint32_t idr1 = read32 (smmu, 0x24);
+    uint32_t idr2 = read32 (smmu, 0x28);
+    unsigned groups = idr0 & 255;
+    if (groups > 128) groups = 128;
+    unsigned valid = 0, freeg = 0;
+    int n = snprintf (census, sizeof (census),
+                      "SMMU census CR0=%x IDR0=%x IDR1=%x IDR2=%x groups=%u\\n",
+                      cr0, idr0, idr1, idr2, groups);
+    for (unsigned i = 0; i < groups && n > 0 && n < (int) sizeof (census) - 48; ++i) {
+      uint32_t smr = read32 (smmu, 0x800 + 4 * i);
+      if (!(smr & 0x80000000U)) { freeg++; continue; }
+      uint32_t s2cr = read32 (smmu, 0xc00 + 4 * i);
+      valid++;
+      n += snprintf (census + n, sizeof (census) - n,
+                     "%u:sm=%x s2=%x\\n", i, smr, s2cr);
     }
-    if (chosen != 0xffffffffU) {
-      write32 (smmu, 0xc00 + 4 * chosen, bank);
-      write32 (smmu, 0x800 + 4 * chosen, 0x80000000U | stream);
-      if (read32 (smmu, 0xc00 + 4 * chosen) == bank &&
-          read32 (smmu, 0x800 + 4 * chosen) == (0x80000000U | stream)) {
-        report[0] = chosen | (bank << 16);
-        report[1] = read32 (smmu, 0x1000 + 4 * bank);
-        report[2] = read32 (cb, 0x0);
-        return;
-      }
-    }
-    uint32_t  validLo = 0, validHi = 0;
-    for (unsigned i = 0; i < 64; ++i) {
-      if (read32 (smmu, 0x800 + 4 * i) & 0x80000000U) validLo |= 1U << i;
-    }
-    for (unsigned i = 64; i < 128; ++i) {
-      if (read32 (smmu, 0x800 + 4 * i) & 0x80000000U) validHi |= 1U << (i - 64);
-    }
-    gRootDiagnostic.smr = writable[0];
-    gRootDiagnostic.s2cr = writable[1];
-    gRootDiagnostic.smmuId1 = validLo;
-    gRootDiagnostic.smmuId2 = validHi;
-    gRootDiagnostic.stage = "SMMU readback";
-    gRootDiagnostic.result = static_cast<uint32_t> (kIOReturnNotReady);
+    n += snprintf (census + n, sizeof (census) - n,
+                   "valid=%u free=%u idx=%u bank=%u\\n", valid, freeg, index, bank);
     rootDiagnosticFailure (failure);
-    panic ("NATIVE_UFS smmu: %s idx=%u bank=%u cba2r=%x wr=%016llx%016llx ch=%u",
-           failure, index, bank, gRootDiagnostic.cba2r,
-           writable[1], writable[0], chosen);
+    panic ("NATIVE_UFS smmu census: %s", census);
   }"""
 
 if anchor not in src:
-    raise SystemExit('smr sweep: anchor block not found in NativeUfs.cpp')
+    raise SystemExit('smmu census: anchor block not found in NativeUfs.cpp')
 target.write_text(src.replace(anchor, replacement, 1))
-print('smr sweep injected into', target)
+print('smmu census injected into', target)
