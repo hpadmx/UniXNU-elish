@@ -82,8 +82,20 @@ replacement = """  if (failure) {
       n += snprintf (gRootMediaText + n, sizeof (gRootMediaText) - n,
                      "%u:sm=%x s2=%x\\n", i, smr, s2cr);
     }
+    uint32_t cr0 = read32 (smmu, 0x0);
+    write32 (smmu, 0x0, cr0 | 2);
+    uint32_t cr0b = read32 (smmu, 0x0);
+    n += snprintf (gRootMediaText + n, sizeof (gRootMediaText) - n,
+                   "CR0 %x->%x %s", cr0, cr0b,
+                   (cr0b & 2) ? "CLIENT-BYPASS-OK" : "WRITE-IGNORED");
+    if (cr0b & 2) {
+      report[0] = index | (bank << 16);
+      report[1] = read32 (smmu, 0x1000 + 4 * bank);
+      report[2] = read32 (cb, 0x0);
+      return;
+    }
     rootDiagnosticFailure (failure);
-    panic ("NATIVE_UFS smmu census idx=%u bank=%u", index, bank);
+    panic ("NATIVE_UFS smmu census idx=%u bank=%u CR0w=%x", index, bank, cr0b);
   }"""
 
 if anchor not in src:
