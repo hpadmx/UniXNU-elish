@@ -75,6 +75,17 @@ replacement = """  if (failure) {
         return;
       }
     }
+    uint32_t  validLo = 0, validHi = 0;
+    for (unsigned i = 0; i < 64; ++i) {
+      if (read32 (smmu, 0x800 + 4 * i) & 0x80000000U) validLo |= 1U << i;
+    }
+    for (unsigned i = 64; i < 128; ++i) {
+      if (read32 (smmu, 0x800 + 4 * i) & 0x80000000U) validHi |= 1U << (i - 64);
+    }
+    gRootDiagnostic.smr = writable[0];
+    gRootDiagnostic.s2cr = writable[1];
+    gRootDiagnostic.smmuId1 = validLo;
+    gRootDiagnostic.smmuId2 = validHi;
     gRootDiagnostic.stage = "SMMU readback";
     gRootDiagnostic.result = static_cast<uint32_t> (kIOReturnNotReady);
     rootDiagnosticFailure (failure);
