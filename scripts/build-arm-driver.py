@@ -77,6 +77,11 @@ if component in ('NativeVirtioBlock', 'NativeRamBlock', 'NativeUfs'):
 if component == 'NativeUfs':
     command += ['-I', str(ROOT / 'kits/VerifiedRoot/include'), '-I', str(ROOT / 'drivers/NativeVirtioBlock'),
                 '-DNATIVE_VERIFIED_BLOCK=1', '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-mgeneral-regs-only']
+    # The __kernel__ copy of IOBlockStorageDevice must not collide with the
+    # prelinked IOStorageFamily kext's registration (OSMetaClass duplicate
+    # panic, OSMetaClass.cpp:896). Compile it under a private class name;
+    # the kext keeps the public one for apfs and the rest of the prelink.
+    command += ['-D', 'IOBlockStorageDevice=NativeIOBlockStorageDevice']
 if component=='NativeOfflineGPU':
     command += ['-I',str(ROOT/'drivers/NativeVirtioConsole')]
 if component in ('NativeLegacyDisplay','NativeHidInput'):
@@ -131,7 +136,8 @@ if component == 'NativeUfs':
         extra.append(obj)
 
     compile_into(ROOT / 'refer/IOStorageFamily/IOBlockStorageDevice.cpp', 'IOBlockStorageDevice.o',
-                 ['-I', str(ROOT / 'build/storage-abi/include'), '-Wno-deprecated-declarations'])
+                 ['-I', str(ROOT / 'build/storage-abi/include'), '-Wno-deprecated-declarations',
+                  '-D', 'IOBlockStorageDevice=NativeIOBlockStorageDevice'])
     stub = ROOT / 'kits/elish/vr-bringup-stub.c'
     compile_into(stub, 'vr-bringup-stub.o', [])
     subprocess.run(['xcrun', 'ar', 'rcs', archive, *extra], check=True)
