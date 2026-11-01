@@ -2,22 +2,36 @@
 """CI pre_build hook: inject the SMR sweep + retry into NativeUfs.cpp.
 
 elish apps_smmu: SMR[86] ignored its write (read back 0) while S2CR/CBAR/
-SCTLR all stuck, so the group is likely locked by firmware. This patch
-makes configureUfsSmmu's failure path sweep all 128 stream-match groups
-with a valid-bit-clear probe write (cannot influence stream matching),
-retry the takeover on the first writable group, and carry the writable
-mask on the panic screen if nothing is writable.
+SCTLR all stuck, so the group is likely locked by firmware. This hook
+initializes the drivers/NativeUfs submodule if needed, then injects a
+failure-path patch: sweep all 128 stream-match groups with a valid-bit-
+clear probe write (cannot influence stream matching), retry the takeover
+on the first writable group, and carry the writable mask on the panic
+screen if nothing is writable.
+
+The later "git submodule update --init --recursive" from the build is a
+no-op once the submodule sits at its pinned commit, so the patch
+survives into the compile.
 """
 import os
+import subprocess
 import sys
 from pathlib import Path
 
-here = Path(__file__).resolve().parent                    # <device>/scripts
-device = Path(os.environ.get('UNIXNU_DEVICE') or here.parent)
+device = Path(os.environ.get('DEVICE_DIR')
+              or os.environ.get('UNIXNU_DEVICE')
+              or (Path(__file__).resolve().parent.parent))
 unixnu = device.parent
-target = unixnu / 'drivers' / 'NativeUfs' / 'NativeUfs.cpp'
-src = target.read_text()
+sub = unixnu / 'drivers' / 'NativeUfs'
+target = sub / 'NativeUfs.cpp'
 
+if not target.is_file():
+    subprocess.run(['git', '-C', str(unixnu), 'submodule', 'update', '--init',
+                    '--depth', '1', 'drivers/NativeUfs'], check=True)
+if not target.is_file():
+    raise SystemExit(f'smr sweep: {target} still missing after submodule init')
+
+src = target.read_text()
 if 'SMR sweep' in src:
     print('smr sweep already applied')
     sys.exit(0)
